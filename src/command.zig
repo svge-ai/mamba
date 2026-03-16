@@ -1,6 +1,7 @@
 const std = @import("std");
 const args_mod = @import("args.zig");
 const flags_mod = @import("flags.zig");
+const help_mod = @import("help.zig");
 
 pub const ValidateResult = args_mod.ValidateResult;
 pub const ArgValidator = args_mod.ArgValidator;
@@ -75,7 +76,7 @@ pub const Command = struct {
     pub const MAX_CHILDREN = 32;
     pub const MAX_FLAGS = 64;
     const MAX_ALL_FLAGS = 128;
-    const PATH_BUF_SIZE = 256;
+    pub const PATH_BUF_SIZE = 256;
 
     /// Initialize a Command from CommandOpts.
     pub fn init(opts: CommandOpts) Command {
@@ -108,6 +109,11 @@ pub const Command = struct {
         self.children_count += 1;
     }
 
+    /// Print the help text for this command to its output.
+    pub fn help(self: *Command) void {
+        help_mod.writeHelp(self);
+    }
+
     /// Execute using OS args (skipping argv[0]).
     pub fn execute(self: *Command) !void {
         try self.executeWithArgs(&.{});
@@ -130,7 +136,44 @@ pub const Command = struct {
 
         const remaining = exec_args[remaining_start..];
 
-        // 2. Parse flags from remaining args
+        // 2. Handle help subcommand: "cmd help [target...]"
+        if (remaining.len > 0 and std.mem.eql(u8, remaining[0], "help")) {
+            var help_target: *Command = target;
+            for (remaining[1..]) |arg| {
+                if (help_target.findChild(arg)) |child| {
+                    help_target = child;
+                } else {
+                    break;
+                }
+            }
+            help_mod.writeHelp(help_target);
+            return;
+        }
+
+        // 3. Handle --help / -h anywhere in remaining args
+        for (remaining) |arg| {
+            if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+                help_mod.writeHelp(target);
+                return;
+            }
+        }
+
+        // 4. Handle --version if the target command has a version set
+        if (target.version.len > 0) {
+            for (remaining) |arg| {
+                if (std.mem.eql(u8, arg, "--version")) {
+                    var path_buf: [PATH_BUF_SIZE]u8 = undefined;
+                    const cmd_path = target.commandPathBuf(&path_buf);
+                    target.writeOut(cmd_path);
+                    target.writeOut(" version ");
+                    target.writeOut(target.version);
+                    target.writeOut("\n");
+                    return;
+                }
+            }
+        }
+
+        // 5. Parse flags from remaining args
         const all_defs = target.collectAllFlags();
         const parse_result = flags_mod.parseFlags(remaining, all_defs.defs[0..all_defs.count]) catch |e| {
             switch (e) {
@@ -201,7 +244,13 @@ pub const Command = struct {
             }
         }
 
-        // 4. Run hook chain
+        // Show help for non-runnable commands (like cobra)
+        if (target.run == null) {
+            help_mod.writeHelp(target);
+            return;
+        }
+
+        // Run hook chain
         // persistent_pre_run: walk up parent chain, find first one
         if (target.findPersistentPreRun()) |hook| {
             try hook(target, positional);
