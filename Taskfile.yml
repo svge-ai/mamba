@@ -1,0 +1,22 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the library
+    cmds:
+      - zig build
+
+  test:
+    desc: Run tests
+    cmds:
+      - zig build test
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf .zig-cache zig-out

@@ -1,31 +1,9 @@
 # Mamba
 
-Zig CLI command framework, inspired by Go's [cobra](https://github.com/spf13/cobra).
+A Zig CLI framework, ported from Go's [spf13/cobra](https://github.com/spf13/cobra).
 
-## Features
-
-- Command struct with subcommand routing
-- Positional arg validators (NoArgs, ExactArgs, MinArgs, etc.)
-- Flag parsing (bool, string, int)
-- Run hooks (PreRun, Run, PostRun)
-- Help/usage generation
-
-## Usage
-
-```zig
-const mamba = @import("mamba");
-
-const cmd = mamba.Command.init(.{
-    .name = "greet",
-    .short = "Say hello",
-    .run = struct {
-        fn run(_: *mamba.Command, _: []const []const u8) !void {
-            std.debug.print("Hello!\n", .{});
-        }
-    }.run,
-});
-```
+Command-tree routing, flag parsing, arg validation, and hook chains — in idiomatic Zig.
 
 ## License
 
-Apache-2.0
+Apache 2.0 — same as the upstream cobra project.
