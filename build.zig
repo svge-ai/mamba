@@ -31,7 +31,18 @@ pub fn build(b: *std.Build) void {
     args_tests.root_module.addImport("mamba", mamba_mod);
     const run_args_tests = b.addRunArtifact(args_tests);
 
+    const help_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/help_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    help_tests.root_module.addImport("mamba", mamba_mod);
+    const run_help_tests = b.addRunArtifact(help_tests);
+
     const test_step = b.step("test", "Run all tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_args_tests.step);
+    test_step.dependOn(&run_help_tests.step);
 }

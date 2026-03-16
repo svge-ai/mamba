@@ -6,6 +6,7 @@
 pub const command = @import("command.zig");
 pub const args = @import("args.zig");
 pub const flags = @import("flags.zig");
+pub const help = @import("help.zig");
 
 // Re-export primary types at the top level for convenience.
 pub const Command = command.Command;
@@ -23,5 +24,6 @@ test {
     _ = @import("args.zig");
     _ = @import("flags.zig");
     _ = @import("command.zig");
+    _ = @import("help.zig");
     // Integration tests live in tests/ — run via build.zig test targets
 }
