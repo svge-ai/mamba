@@ -1,0 +1,38 @@
+site_name: Mamba
+site_description: A Zig CLI framework ported from Go's cobra
+repo_url: https://github.com/svge-ai/mamba
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: green
+    accent: lime
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.expand
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/install.md
+    - Quick Start: getting-started/quickstart.md
+  - Guide:
+    - Commands: guide/commands.md
+    - Flags: guide/flags.md
+    - Arguments: guide/arguments.md
+    - Hooks: guide/hooks.md
+  - API Reference: api.md
+  - Cobra Migration: cobra-migration.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true

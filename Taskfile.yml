@@ -1,5 +1,8 @@
 version: '3'
 
+vars:
+  MISE: mise x --
+
 tasks:
   default:
     desc: Show available tasks
@@ -9,14 +12,29 @@ tasks:
   build:
     desc: Build the library
     cmds:
-      - zig build
+      - "{{.MISE}} zig build"
 
   test:
     desc: Run tests
     cmds:
-      - zig build test
+      - "{{.MISE}} zig build test"
 
   clean:
     desc: Clean build artifacts
     cmds:
-      - rm -rf .zig-cache zig-out
+      - rm -rf .zig-cache zig-out site
+
+  doc:install:
+    desc: Install mkdocs dependencies
+    cmds:
+      - "{{.MISE}} pip install mkdocs mkdocs-material"
+
+  doc:build:
+    desc: Build documentation site
+    cmds:
+      - "{{.MISE}} mkdocs build"
+
+  doc:serve:
+    desc: Serve documentation locally with hot reload
+    cmds:
+      - "{{.MISE}} mkdocs serve"
