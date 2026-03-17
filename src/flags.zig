@@ -26,7 +26,7 @@ pub const FlagValue = struct {
 
 /// Flag constructors — convenience functions that return FlagDef.
 pub const Flag = struct {
-    pub fn string(name: []const u8, short: ?u8, desc: []const u8, default: []const u8) FlagDef {
+    pub fn string(comptime name: []const u8, short: ?u8, comptime desc: []const u8, comptime default: []const u8) FlagDef {
         return .{
             .name = name,
             .short = short,
@@ -36,7 +36,7 @@ pub const Flag = struct {
         };
     }
 
-    pub fn boolean(name: []const u8, short: ?u8, desc: []const u8, default: bool) FlagDef {
+    pub fn boolean(comptime name: []const u8, short: ?u8, comptime desc: []const u8, comptime default: bool) FlagDef {
         return .{
             .name = name,
             .short = short,
@@ -46,27 +46,23 @@ pub const Flag = struct {
         };
     }
 
-    pub fn int(name: []const u8, short: ?u8, desc: []const u8, default: i64) FlagDef {
-        // For comptime int defaults, we store the string representation.
-        // Since FlagDef.default_raw is []const u8, we use comptime formatting.
-        _ = default;
+    pub fn int(comptime name: []const u8, short: ?u8, comptime desc: []const u8, comptime default: i64) FlagDef {
         return .{
             .name = name,
             .short = short,
             .description = desc,
             .kind = .int,
-            .default_raw = "0", // caller should use intWithDefault for runtime
+            .default_raw = std.fmt.comptimePrint("{d}", .{default}),
         };
     }
 
-    pub fn float(name: []const u8, short: ?u8, desc: []const u8, default: f64) FlagDef {
-        _ = default;
+    pub fn float(comptime name: []const u8, short: ?u8, comptime desc: []const u8, comptime default: f64) FlagDef {
         return .{
             .name = name,
             .short = short,
             .description = desc,
             .kind = .float,
-            .default_raw = "0.0",
+            .default_raw = std.fmt.comptimePrint("{d}", .{default}),
         };
     }
 };
