@@ -115,8 +115,20 @@ pub const Command = struct {
     }
 
     /// Execute using OS args (skipping argv[0]).
+    /// Shows help if no arguments are provided (matches cobra behavior).
     pub fn execute(self: *Command) !void {
-        try self.executeWithArgs(&.{});
+        const argv = std.os.argv;
+        if (argv.len <= 1) {
+            // No args: show help (like cobra)
+            help_mod.writeHelp(self);
+            return;
+        }
+        var args_buf: [128][]const u8 = undefined;
+        const n = @min(argv.len - 1, args_buf.len);
+        for (0..n) |i| {
+            args_buf[i] = std.mem.sliceTo(argv[i + 1], 0);
+        }
+        try self.executeWithArgs(args_buf[0..n]);
     }
 
     /// Execute with the given args (for testing / programmatic use).
@@ -244,7 +256,7 @@ pub const Command = struct {
             }
         }
 
-        // Show help for non-runnable commands (like cobra)
+        // Show help for non-runnable commands (matches cobra)
         if (target.run == null) {
             help_mod.writeHelp(target);
             return;
