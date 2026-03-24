@@ -210,16 +210,21 @@ fn writeFlagLine(cmd: *Command, def: FlagDef, max_left: usize) void {
     var buf: [LINE_BUF_SIZE]u8 = undefined;
     var pos: usize = 0;
 
-    // Short flag prefix
+    // Short flag prefix (short code 0 means "no short code")
     if (def.short) |s| {
-        @memcpy(buf[pos..][0..2], "  ");
-        pos += 2;
-        buf[pos] = '-';
-        pos += 1;
-        buf[pos] = s;
-        pos += 1;
-        @memcpy(buf[pos..][0..2], ", ");
-        pos += 2;
+        if (s != 0) {
+            @memcpy(buf[pos..][0..2], "  ");
+            pos += 2;
+            buf[pos] = '-';
+            pos += 1;
+            buf[pos] = s;
+            pos += 1;
+            @memcpy(buf[pos..][0..2], ", ");
+            pos += 2;
+        } else {
+            @memset(buf[pos..][0..6], ' ');
+            pos += 6;
+        }
     } else {
         @memset(buf[pos..][0..6], ' ');
         pos += 6;
