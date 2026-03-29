@@ -1,6 +1,6 @@
 .{
     .name = .mamba,
-    .version = "0.1.8",
+    .version = "0.1.9",
     .fingerprint = 0x96bd41f83367451,
     .minimum_zig_version = "0.15.2",
     .paths = .{
