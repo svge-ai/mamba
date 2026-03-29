@@ -133,20 +133,50 @@ pub const Command = struct {
 
     /// Execute with the given args (for testing / programmatic use).
     pub fn executeWithArgs(self: *Command, exec_args: []const []const u8) !void {
-        // 1. Walk command tree to find target
+        // 1. Walk command tree to find target, skipping flags so that
+        //    persistent flags before subcommand names don't break traversal.
+        //    Cobra does the same thing in Command.Traverse().
         var target: *Command = self;
-        var remaining_start: usize = 0;
 
-        for (exec_args, 0..) |arg, idx| {
-            if (target.findChild(arg)) |child| {
+        // Collect non-subcommand args (flags + positional) for the target.
+        var remaining_buf: [256][]const u8 = undefined;
+        var remaining_count: usize = 0;
+
+        var i: usize = 0;
+        while (i < exec_args.len) {
+            const arg = exec_args[i];
+
+            if (arg.len > 0 and arg[0] == '-') {
+                // This is a flag — keep it in remaining for later parsing.
+                if (remaining_count < remaining_buf.len) {
+                    remaining_buf[remaining_count] = arg;
+                    remaining_count += 1;
+                }
+                // If it's a non-boolean flag that expects a value in the next arg,
+                // carry that value along too. We need flag defs to know this.
+                if (!isBooleanOrSelfContainedFlag(target, arg)) {
+                    i += 1;
+                    if (i < exec_args.len) {
+                        if (remaining_count < remaining_buf.len) {
+                            remaining_buf[remaining_count] = exec_args[i];
+                            remaining_count += 1;
+                        }
+                    }
+                }
+            } else if (target.findChild(arg)) |child| {
                 target = child;
-                remaining_start = idx + 1;
             } else {
-                break;
+                // Positional arg or unrecognized — keep in remaining.
+                if (remaining_count < remaining_buf.len) {
+                    remaining_buf[remaining_count] = arg;
+                    remaining_count += 1;
+                }
             }
+
+            i += 1;
         }
 
-        const remaining = exec_args[remaining_start..];
+        const remaining = remaining_buf[0..remaining_count];
 
         // 2. Handle help subcommand: "cmd help [target...]"
         if (remaining.len > 0 and std.mem.eql(u8, remaining[0], "help")) {
@@ -206,8 +236,8 @@ pub const Command = struct {
 
         // Store parsed flags on target
         const flag_vals = parse_result.flagValues();
-        for (flag_vals, 0..) |fv, i| {
-            target.parsed_flags[i] = fv;
+        for (flag_vals, 0..) |fv, fi| {
+            target.parsed_flags[fi] = fv;
         }
         target.parsed_flags_count = flag_vals.len;
 
@@ -458,6 +488,51 @@ pub const Command = struct {
             current = cmd.parent;
         }
         return null;
+    }
+
+    /// Determine whether a flag argument is "self-contained" — i.e. it does
+    /// NOT consume the next argument as its value. Returns true for:
+    ///   - Boolean flags (--verbose, -v)
+    ///   - Flags using = syntax (--output=foo, -o=foo)
+    ///   - Negated booleans (--no-verbose)
+    /// Returns false for non-boolean flags in space-separated form (--output foo).
+    fn isBooleanOrSelfContainedFlag(cmd: *Command, arg: []const u8) bool {
+        if (arg.len >= 2 and arg[0] == '-' and arg[1] == '-') {
+            const rest = arg[2..];
+            // --name=value is self-contained
+            if (std.mem.indexOf(u8, rest, "=") != null) return true;
+            // --no-name is self-contained (negated boolean)
+            if (rest.len > 3 and std.mem.startsWith(u8, rest, "no-")) {
+                return true;
+            }
+            // Look up flag definition to check if boolean
+            const all = cmd.collectAllFlags();
+            for (all.defs[0..all.count]) |def| {
+                if (std.mem.eql(u8, def.name, rest)) {
+                    return def.kind == .boolean;
+                }
+            }
+            // Unknown flag — assume it takes a value (conservative)
+            return false;
+        } else if (arg.len >= 2 and arg[0] == '-' and arg[1] != '-') {
+            // Short flag
+            if (arg.len > 2) {
+                // -o=value or -ovalue — self-contained
+                return true;
+            }
+            // -o (len == 2) — look up if boolean
+            const short_char = arg[1];
+            const all = cmd.collectAllFlags();
+            for (all.defs[0..all.count]) |def| {
+                if (def.short) |s| {
+                    if (s == short_char) {
+                        return def.kind == .boolean;
+                    }
+                }
+            }
+            return false;
+        }
+        return true;
     }
 
     /// Collect all flag definitions: local flags + persistent flags from parent chain.
@@ -800,4 +875,88 @@ test "child inherits IO buffers from root" {
 
     try root.executeWithArgs(&.{"child"});
     try testing.expectEqualStrings("from child", out_buf[0..root.out_len]);
+}
+
+test "persistent flags from root are inherited by subcommands" {
+    // Mirrors cobra behavior: persistent flags defined on the root command
+    // are accessible from any descendant, even when specified before the
+    // subcommand name (e.g., "grimoire --index example collection add").
+    const child_run = struct {
+        fn run(cmd: *Command, _: []const []const u8) anyerror!void {
+            const index = cmd.getFlag([]const u8, "index");
+            cmd.writeOut(index);
+        }
+    }.run;
+
+    var root = Command.init(.{
+        .name = "grimoire",
+        .persistent_flags = &.{
+            Flag.string("index", 'i', "Index name", "default"),
+        },
+        .run = &emptyRun,
+    });
+    var collection = Command.init(.{ .name = "collection" });
+    var add = Command.init(.{
+        .name = "add",
+        .flags = &.{
+            Flag.string("name", 'n', "Collection name", ""),
+        },
+        .run = &child_run,
+    });
+    collection.addCommand(&add);
+    root.addCommand(&collection);
+
+    // Test 1: persistent flag BEFORE subcommand names
+    var out_buf: [4096]u8 = undefined;
+    var err_buf: [4096]u8 = undefined;
+    root.setOut(&out_buf);
+    root.setErr(&err_buf);
+
+    try root.executeWithArgs(&.{ "--index", "example", "collection", "add", "/tmp/foo", "--name", "docs" });
+    try testing.expectEqualStrings("example", out_buf[0..root.out_len]);
+
+    // Test 2: persistent flag AFTER subcommand names
+    root.out_len = 0;
+    try root.executeWithArgs(&.{ "collection", "add", "/tmp/foo", "--index", "myindex", "--name", "docs" });
+    try testing.expectEqualStrings("myindex", out_buf[0..root.out_len]);
+
+    // Test 3: persistent flag default when not specified
+    root.out_len = 0;
+    try root.executeWithArgs(&.{ "collection", "add", "/tmp/foo", "--name", "docs" });
+    try testing.expectEqualStrings("default", out_buf[0..root.out_len]);
+}
+
+test "persistent flags with short form before subcommand" {
+    const child_run = struct {
+        fn run(cmd: *Command, _: []const []const u8) anyerror!void {
+            const verbose = cmd.getFlag(bool, "verbose");
+            if (verbose) {
+                cmd.writeOut("verbose-on");
+            } else {
+                cmd.writeOut("verbose-off");
+            }
+        }
+    }.run;
+
+    var root = Command.init(.{
+        .name = "app",
+        .persistent_flags = &.{
+            Flag.boolean("verbose", 'v', "Verbose output", false),
+        },
+        .run = &emptyRun,
+    });
+    var sub = Command.init(.{
+        .name = "sub",
+        .run = &child_run,
+    });
+    root.addCommand(&sub);
+
+    var out_buf: [4096]u8 = undefined;
+    var err_buf: [4096]u8 = undefined;
+    root.setOut(&out_buf);
+    root.setErr(&err_buf);
+
+    // Short boolean flag before subcommand
+    try root.executeWithArgs(&.{ "-v", "sub" });
+    try testing.expectEqualStrings("verbose-on", out_buf[0..root.out_len]);
 }
